@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>Smart Text Diff · Compare & Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ----- RESET & GLOBAL ----- */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  :root {
+    --bg: #0d0f14;
+    --bg2: #13151c;
+    --bg3: #1a1d27;
+    --bg4: #22263a;
+    --border: #252a3d;
+    --border-strong: #2e3450;
+    --text: #e8ecff;
+    --text2: #8892b0;
+    --text3: #4a5270;
+    --add-bg: #071d11;
+    --add-text: #34d27a;
+    --add-border: #1a7a42;
+    --add-mark: rgba(52, 210, 122, 0.25);
+    --del-bg: #1a0a0d;
+    --del-text: #f07070;
+    --del-border: #7a2020;
+    --del-mark: rgba(240, 112, 112, 0.25);
+    --chg-bg: #1a1500;
+    --chg-text: #f5c842;
+    --chg-border: #7a6010;
+    --chg-mark: rgba(245, 200, 66, 0.28);
+    --line-num: #3a4060;
+    --accent: #7c84f8;
+    --accent-hover: #a5b0ff;
+    --accent-glow: rgba(124, 132, 248, 0.15);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    --header-h: 52px;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  [data-theme="light"] {
+    --bg: #f0f2f8;
+    --bg2: #ffffff;
+    --bg3: #f5f7fb;
+    --bg4: #e8ecf5;
+    --border: #d4d9ec;
+    --border-strong: #bfc7e0;
+    --text: #0f1428;
+    --text2: #4a5270;
+    --text3: #9099b8;
+    --add-bg: #edfbf3;
+    --add-text: #1a7a42;
+    --add-border: #86e4aa;
+    --add-mark: rgba(52, 180, 100, 0.18);
+    --del-bg: #fff0f0;
+    --del-text: #b82020;
+    --del-border: #f4a8a8;
+    --del-mark: rgba(200, 60, 60, 0.14);
+    --chg-bg: #fffcec;
+    --chg-text: #8a5c00;
+    --chg-border: #f0d880;
+    --chg-mark: rgba(200, 160, 0, 0.18);
+    --line-num: #9099b8;
+    --accent: #5560e8;
+    --accent-hover: #7c84f8;
+    --accent-glow: rgba(85, 96, 232, 0.1);
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
+  }
+
+  html, body {
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100dvh;
+  }
+
+  /* ----- SCROLLBAR ----- */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* ----- FOCUS VISIBLE ----- */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* ----- LOADING BAR ----- */
+  .loading-indicator {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.18s ease;
+    z-index: 999;
+    pointer-events: none;
+  }
+  .loading-indicator.active { transform: scaleX(1); }
+
+  /* ----- HEADER ----- */
+  header {
+    height: var(--header-h);
+    min-height: var(--header-h);
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  /* subtle header gradient line at bottom */
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .brand-icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px var(--accent-glow);
+  }
+
+  .brand-icon svg { display: block; }
+
+  header h1 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .header-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    flex-shrink: 0;
+    margin: 0 2px;
+  }
+
+  /* ----- STAT PILLS ----- */
+  .header-stats {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .stat-pill {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    padding: 3px 9px 3px 7px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+    transition: opacity 0.15s;
+  }
+
+  .stat-add { color: var(--add-text); background: var(--add-bg); border-color: var(--add-border); }
+  .stat-del { color: var(--del-text); background: var(--del-bg); border-color: var(--del-border); }
+  .stat-chg { color: var(--chg-text); background: var(--chg-bg); border-color: var(--chg-border); }
+
+  .stat-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /* ----- HEADER ACTIONS ----- */
+  .header-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* ----- BUTTONS ----- */
+  .btn {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text2);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+
+  .btn:hover {
+    background: var(--bg4);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  .btn:active { opacity: 0.8; transform: translateY(1px); }
+
+  .btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .btn-icon {
+    width: 28px;
+    padding: 5px 0;
+    justify-content: center;
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* mode tabs */
+  .diff-mode-tabs {
+    display: flex;
+    gap: 1px;
+    background: var(--bg);
+    padding: 2px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 11px;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    border: none;
+    transition: background 0.1s, color 0.1s;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+
+  .tab-btn:hover { color: var(--text2); }
+
+  .tab-btn.active {
+    background: var(--bg2);
+    color: var(--text);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  }
+
+  /* MAIN LAYOUT */
+  .main-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg2);
+    min-width: 0;
+  }
+
+  .panel-header {
+    height: 38px;
+    min-height: 38px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .panel-label-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--bg4);
+    border: 1px solid var(--border);
+  }
+
+  .panel-left .panel-label-badge {
+    color: var(--del-text);
+    background: var(--del-bg);
+    border-color: var(--del-border);
+  }
+
+  .panel-right .panel-label-badge {
+    color: var(--add-text);
+    background: var(--add-bg);
+    border-color: var(--add-border);
+  }
+
+  .char-count {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text3);
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+
+  .panel-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+  }
+
+  /* LEFT panel right border */
+  .panel-left .panel-body {
+    border-right: 1px solid var(--border);
+  }
+
+  /* line numbers column */
+  .line-numbers {
+    width: 46px;
+    flex-shrink: 0;
+    background: var(--bg3);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .line-numbers-inner {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--line-num);
+    text-align: right;
+    padding: 14px 8px 14px 0;
+    white-space: pre;
+  }
+
+  /* EDITOR CONTAINER */
+  .editor-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    background: var(--bg2);
+    min-width: 0;
+  }
+
+  /* grid overlay — perfect overlap */
+  .diff-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    width: 100%;
+    min-height: 100%;
+  }
+
+  .diff-grid > textarea,
+  .diff-grid > .diff-overlay {
+    grid-area: 1 / 1 / 2 / 2;
+    width: 100%;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    padding: 14px 16px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    tab-size: 2;
+    -moz-tab-size: 2;
+  }
+
+  .diff-grid > textarea {
+    resize: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    caret-color: var(--accent);
+    overflow: hidden;
+    background: transparent;
+    z-index: 2;
+    position: relative;
+  }
+
+  .diff-grid > .diff-overlay {
+    pointer-events: none;
+    z-index: 1;
+    color: transparent;
+    position: relative;
+  }
+
+  /* inline highlight spans */
+  .diff-overlay span.line {
+    display: block;
+    min-height: 1.65em;
+  }
+  .diff-overlay span.line.add {
+    background: var(--add-bg);
+    box-shadow: inset 3px 0 0 var(--add-border);
+  }
+  .diff-overlay span.line.del {
+    background: var(--del-bg);
+    box-shadow: inset 3px 0 0 var(--del-border);
+  }
+  .diff-overlay span.line.chg {
+    background: var(--chg-bg);
+    box-shadow: inset 3px 0 0 var(--chg-border);
+  }
+
+  .diff-overlay mark {
+    border-radius: 3px;
+    padding: 0 1px;
+    font-weight: 700;
+  }
+  .diff-overlay mark.add { background: var(--add-mark); color: var(--add-text); }
+  .diff-overlay mark.del { background: var(--del-mark); color: var(--del-text); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .diff-overlay mark.chg { background: var(--chg-mark); color: var(--chg-text); }
+
+  /* empty placeholder hint */
+  .empty-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--text3);
+    pointer-events: none;
+    z-index: 5;
+    font-size: 12px;
+    font-family: var(--font-ui);
+    background: var(--bg3);
+    padding: 14px 20px;
+    border-radius: 10px;
+    white-space: nowrap;
+    border: 1px dashed var(--border-strong);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.5;
+  }
+
+  .empty-hint-icon {
+    font-size: 22px;
+    line-height: 1;
+    opacity: 0.5;
+  }
+
+  .empty-hint-label {
+    font-weight: 500;
+    color: var(--text2);
+  }
+
+  .empty-hint-sub {
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* center divider / scroll sync */
+  .center-divider {
+    width: 18px;
+    flex-shrink: 0;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 10;
+  }
+
+  .center-scroller-area {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    cursor: ns-resize;
+    width: 100%;
+    padding: 8px 0;
+    min-height: 0;
+  }
+
+  .center-scroll-track {
+    width: 3px;
+    flex: 1;
+    background: var(--border);
+    border-radius: 4px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .center-scroll-thumb {
+    width: 7px;
+    background: var(--accent);
+    border-radius: 4px;
+    position: absolute;
+    left: -2px;
+    top: 0;
+    cursor: grab;
+    transition: width 0.1s, left 0.1s, background 0.1s;
+    touch-action: none;
+    min-height: 24px;
+    box-shadow: 0 0 6px var(--accent-glow);
+  }
+
+  .center-scroll-thumb:hover,
+  .center-scroll-thumb.dragging {
+    width: 11px;
+    left: -4px;
+    background: var(--accent-hover);
+    cursor: grabbing;
+  }
+
+  /* ----- RESPONSIVE ----- */
+  @media (max-width: 700px) {
+    header {
+      padding: 0 12px;
+      height: auto;
+      min-height: 48px;
+      flex-wrap: wrap;
+      padding-top: 6px;
+      padding-bottom: 6px;
+      gap: 6px;
+    }
+
+    header h1 { font-size: 0.8125rem; }
+    .header-divider { display: none; }
+    .header-stats { display: none; }
+
+    .header-actions { gap: 4px; }
+
+    .btn {
+      padding: 5px 9px;
+      font-size: 11px;
+    }
+
+    .tab-btn { padding: 4px 8px; }
+
+    .main-area { flex-direction: column; }
+
+    .center-divider {
+      width: 100%;
+      height: 8px;
+      flex-direction: row;
+      justify-content: center;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      border-left: none;
+      border-right: none;
+    }
+
+    .center-scroller-area { display: none; }
+
+    .panel-left .panel-body { border-right: none; border-bottom: 1px solid var(--border); }
+
+    .empty-hint {
+      white-space: normal;
+      width: 75%;
+      font-size: 11px;
+    }
+
+    .line-numbers { width: 34px; }
+  }
+
+  @media (max-width: 400px) {
+    .diff-mode-tabs { display: none; }
+    .brand-icon { width: 22px; height: 22px; border-radius: 5px; }
+  }
+
+  /* reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="loading-indicator" id="loadingBar" role="progressbar" aria-hidden="true"></div>
+
+<header role="banner">
+  <div class="header-brand">
+    <div class="brand-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    </div>
+    <h1>Text Diff</h1>
+  </div>
+
+  <div class="header-divider"></div>
+
+  <div class="header-stats" aria-label="Diff statistics">
+    <div class="stat-pill stat-add" title="Lines added"><span class="stat-dot" aria-hidden="true"></span>+<span id="addCount">0</span></div>
+    <div class="stat-pill stat-del" title="Lines deleted"><span class="stat-dot" aria-hidden="true"></span>−<span id="delCount">0</span></div>
+    <div class="stat-pill stat-chg" title="Lines changed"><span class="stat-dot" aria-hidden="true"></span>~<span id="chgCount">0</span></div>
+  </div>
+
+  <div class="header-actions">
+    <div class="diff-mode-tabs" role="group" aria-label="Diff mode">
+      <button class="tab-btn active" data-mode="line" aria-pressed="true">Line</button>
+      <button class="tab-btn" data-mode="word" aria-pressed="false">Word</button>
+      <button class="tab-btn" data-mode="char" aria-pressed="false">Char</button>
+    </div>
+    <button class="btn" id="clearBtn" aria-label="Clear both panels" title="Clear all (⌘⇧X)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      Clear
+    </button>
+    <button class="btn" id="exportBtn" aria-label="Copy diff to clipboard" title="Copy diff (⌘⇧C)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Export
+    </button>
+    <button class="btn btn-icon" id="themeBtn" aria-label="Toggle light/dark theme" title="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<main class="main-area" role="main">
+  <!-- LEFT PANEL (Original) -->
+  <div class="panel panel-left" role="region" aria-label="Original text">
+    <div class="panel-header">
+      <span class="panel-label-badge">Original</span>
+      <span class="char-count" id="charCountLeft" aria-live="polite" aria-atomic="true">0 chars · 1 line</span>
+    </div>
+    <div class="panel-body">
+      <div class="line-numbers" aria-hidden="true"><div class="line-numbers-inner" id="lnLeftInner">1</div></div>
+      <div class="editor-wrap" id="edWrapLeft">
+        <div class="empty-hint" id="hintLeft" aria-hidden="true">
+          <span class="empty-hint-icon">📄</span>
+          <span class="empty-hint-label">Original text</span>
+          <span class="empty-hint-sub">Paste or type here</span>
+        </div>
+        <div class="diff-grid">
+          <textarea id="taLeft" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="" aria-label="Original text input" aria-multiline="true"></textarea>
+          <div class="diff-overlay" id="overlayLeft" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER SCROLL HANDLE -->
+  <div class="center-divider" id="centerDiv" aria-hidden="true">
+    <div class="center-scroller-area" id="centerScrollArea">
+      <div class="center-scroll-track" id="scrollTrack">
+        <div class="center-scroll-thumb" id="scrollThumb"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL (Modified) -->
+  <div class="panel panel-right" role="region" aria-label="Modified text">
+    <div class="panel-header">
+      <span class="panel-label-badge">Modified</span>
+      <span class="char-count" id="charCountRight" aria-live="polite" aria-atomic="true">0 chars · 1 line</span>
+    </div>
+    <div class="panel-body">
+      <div class="line-numbers" aria-hidden="true"><div class="line-numbers-inner" id="lnRightInner">1</div></div>
+      <div class="editor-wrap" id="edWrapRight">
+        <div class="empty-hint" id="hintRight" aria-hidden="true">
+          <span class="empty-hint-icon">✏️</span>
+          <span class="empty-hint-label">Modified text</span>
+          <span class="empty-hint-sub">Paste or type here</span>
+        </div>
+        <div class="diff-grid">
+          <textarea id="taRight" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="" aria-label="Modified text input" aria-multiline="true"></textarea>
+          <div class="diff-overlay" id="overlayRight" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  (function () {
+    'use strict';
+
+    // ── DOM elements ──────────────────────────────────────────────
+    const taLeft        = document.getElementById('taLeft');
+    const taRight       = document.getElementById('taRight');
+    const overlayLeft   = document.getElementById('overlayLeft');
+    const overlayRight  = document.getElementById('overlayRight');
+    const edWrapLeft    = document.getElementById('edWrapLeft');
+    const edWrapRight   = document.getElementById('edWrapRight');
+    const lnLeftInner   = document.getElementById('lnLeftInner');
+    const lnRightInner  = document.getElementById('lnRightInner');
+    const scrollThumb   = document.getElementById('scrollThumb');
+    const scrollTrack   = document.getElementById('scrollTrack');
+    const centerScrollArea = document.getElementById('centerScrollArea');
+    const loadingBar    = document.getElementById('loadingBar');
+    const hintLeft      = document.getElementById('hintLeft');
+    const hintRight     = document.getElementById('hintRight');
+
+    let diffMode      = 'line';
+    let debounceTimer = null;
+    let diffScheduled = false;
+    let isDark        = !window.matchMedia('(prefers-color-scheme: light)').matches;
+    let stats         = { add: 0, del: 0, chg: 0 };
+
+    // Apply initial theme
+    if (!isDark) {
+      document.body.setAttribute('data-theme', 'light');
+      document.getElementById('themeBtn').textContent = '☀️';
+    }
+
+    // ── HTML escape helper ────────────────────────────────────────
+    const esc = (str) =>
+      String(str).replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+
+    // ── LCS + diff engine ────────────────────────────────────────
+    function lcsSimple(a, b) {
+      const m = a.length, n = b.length;
+      if (m === 0 || n === 0) return [];
+
+      // Use flat Array (not Uint16Array) to avoid 65535 cap on long files
+      const w = n + 1;
+      const dp = new Array((m + 1) * w).fill(0);
+
+      for (let i = 1; i <= m; i++) {
+        const ai = a[i - 1];
+        for (let j = 1; j <= n; j++) {
+          dp[i * w + j] = ai === b[j - 1]
+            ? dp[(i - 1) * w + j - 1] + 1
+            : Math.max(dp[(i - 1) * w + j], dp[i * w + j - 1]);
+        }
+      }
+
+      const seq = [];
+      let i = m, j = n;
+      while (i > 0 && j > 0) {
+        if (a[i - 1] === b[j - 1]) {
+          seq.unshift([i - 1, j - 1]);
+          i--; j--;
+        } else if (dp[(i - 1) * w + j] >= dp[i * w + j - 1]) {
+          i--;
+        } else {
+          j--;
+        }
+      }
+      return seq;
+    }
+
+    function diffArrays(a, b) {
+      const common = lcsSimple(a, b);
+      const ops = [];
+      let ai = 0, bi = 0, ci = 0;
+      while (ci < common.length) {
+        const [ca, cb] = common[ci];
+        while (ai < ca) ops.push({ type: 'del', val: a[ai++] });
+        while (bi < cb) ops.push({ type: 'add', val: b[bi++] });
+        ops.push({ type: 'eq', val: a[ai++] });
+        bi++;
+        ci++;
+      }
+      while (ai < a.length) ops.push({ type: 'del', val: a[ai++] });
+      while (bi < b.length) ops.push({ type: 'add', val: b[bi++] });
+      return ops;
+    }
+
+    function tokenize(text, mode) {
+      if (mode === 'char') return text.split('');
+      if (mode === 'word') return text.match(/\S+|\s+/g) || [];
+      return text.split('\n');
+    }
+
+    // word-level diff inside a changed line
+    function wordDiffLine(leftStr, rightStr) {
+      const lToks = tokenize(leftStr, 'word');
+      const rToks = tokenize(rightStr, 'word');
+      const ops = diffArrays(lToks, rToks);
+      let leftHtml = '', rightHtml = '';
+      for (const op of ops) {
+        if (op.type === 'eq') {
+          leftHtml  += esc(op.val);
+          rightHtml += esc(op.val);
+        } else if (op.type === 'del') {
+          leftHtml += `<mark class="chg">${esc(op.val)}</mark>`;
+        } else {
+          rightHtml += `<mark class="chg">${esc(op.val)}</mark>`;
+        }
+      }
+      return { left: leftHtml, right: rightHtml };
+    }
+
+    // ── Line-mode diff ─────────────────────────────────────────────
+    function renderLineDiff(lLines, rLines) {
+      const ops = diffArrays(lLines, rLines);
+      const leftSpans = [], rightSpans = [];
+      let add = 0, del = 0, chg = 0;
+      let i = 0;
+      while (i < ops.length) {
+        const op = ops[i];
+        if (op.type === 'eq') {
+          leftSpans.push(`<span class="line">${esc(op.val)}</span>`);
+          rightSpans.push(`<span class="line">${esc(op.val)}</span>`);
+          i++;
+        } else if (op.type === 'del' && i + 1 < ops.length && ops[i + 1].type === 'add') {
+          const wdiff = wordDiffLine(op.val, ops[i + 1].val);
+          leftSpans.push(`<span class="line chg">${wdiff.left}</span>`);
+          rightSpans.push(`<span class="line chg">${wdiff.right}</span>`);
+          chg++;
+          i += 2;
+        } else if (op.type === 'del') {
+          leftSpans.push(`<span class="line del">${esc(op.val)}</span>`);
+          rightSpans.push(`<span class="line">&nbsp;</span>`);
+          del++;
+          i++;
+        } else {
+          leftSpans.push(`<span class="line">&nbsp;</span>`);
+          rightSpans.push(`<span class="line add">${esc(op.val)}</span>`);
+          add++;
+          i++;
+        }
+      }
+      overlayLeft.innerHTML  = leftSpans.join('');
+      overlayRight.innerHTML = rightSpans.join('');
+      return { add, del, chg };
+    }
+
+    // ── Word/char inline diff (line-aligned) ─────────────────────
+    function renderInlineDiff(lLines, rLines) {
+      const maxLen = Math.max(lLines.length, rLines.length);
+      let add = 0, del = 0, chg = 0;
+      const leftRes = [], rightRes = [];
+      for (let i = 0; i < maxLen; i++) {
+        const leftLine  = i < lLines.length ? lLines[i] : null;
+        const rightLine = i < rLines.length ? rLines[i] : null;
+        if (leftLine === null) {
+          leftRes.push(`<span class="line">&nbsp;</span>`);
+          rightRes.push(`<span class="line add">${esc(rightLine)}</span>`);
+          add++;
+        } else if (rightLine === null) {
+          leftRes.push(`<span class="line del">${esc(leftLine)}</span>`);
+          rightRes.push(`<span class="line">&nbsp;</span>`);
+          del++;
+        } else if (leftLine === rightLine) {
+          leftRes.push(`<span class="line">${esc(leftLine)}</span>`);
+          rightRes.push(`<span class="line">${esc(rightLine)}</span>`);
+        } else {
+          const tokensL = diffMode === 'word'
+            ? (leftLine.match(/\S+|\s+/g)  || [''])
+            : leftLine.split('');
+          const tokensR = diffMode === 'word'
+            ? (rightLine.match(/\S+|\s+/g) || [''])
+            : rightLine.split('');
+          const ops = diffArrays(tokensL, tokensR);
+          let lHtml = '', rHtml = '';
+          for (const op of ops) {
+            if (op.type === 'eq')        { lHtml += esc(op.val); rHtml += esc(op.val); }
+            else if (op.type === 'del')  lHtml += `<mark class="del">${esc(op.val)}</mark>`;
+            else                         rHtml += `<mark class="add">${esc(op.val)}</mark>`;
+          }
+          leftRes.push(`<span class="line chg">${lHtml}</span>`);
+          rightRes.push(`<span class="line chg">${rHtml}</span>`);
+          chg++;
+        }
+      }
+      overlayLeft.innerHTML  = leftRes.join('');
+      overlayRight.innerHTML = rightRes.join('');
+      return { add, del, chg };
+    }
+
+    // ── Main diff entry ───────────────────────────────────────────
+    function computeDiff() {
+      try {
+        const leftVal  = taLeft.value;
+        const rightVal = taRight.value;
+        if (!leftVal && !rightVal) {
+          overlayLeft.innerHTML  = '';
+          overlayRight.innerHTML = '';
+          updateStats(0, 0, 0);
+          return;
+        }
+        const lLines = leftVal.split('\n');
+        const rLines = rightVal.split('\n');
+        const result = diffMode === 'line'
+          ? renderLineDiff(lLines, rLines)
+          : renderInlineDiff(lLines, rLines);
+        updateStats(result.add, result.del, result.chg);
+      } catch (err) {
+        console.error('Diff computation error:', err);
+      }
+    }
+
+    function updateStats(add, del, chg) {
+      stats = { add, del, chg };
+      document.getElementById('addCount').textContent = add;
+      document.getElementById('delCount').textContent = del;
+      document.getElementById('chgCount').textContent = chg;
+    }
+
+    // ── Scheduling + input handlers ───────────────────────────────
+    function scheduleDiff() {
+      loadingBar.classList.add('active');
+      clearTimeout(debounceTimer);
+      diffScheduled = true;
+      debounceTimer = setTimeout(() => {
+        computeDiff();
+        diffScheduled = false;
+        loadingBar.classList.remove('active');
+      }, 80);
+    }
+
+    function updateLineNumbersAndHints(side) {
+      const ta      = side === 'left' ? taLeft      : taRight;
+      const lnInner = side === 'left' ? lnLeftInner : lnRightInner;
+      const hint    = side === 'left' ? hintLeft    : hintRight;
+      const ccSpan  = document.getElementById(side === 'left' ? 'charCountLeft' : 'charCountRight');
+      const val     = ta.value;
+      const lines   = val.split('\n');
+      const lineCount = lines.length;
+      hint.style.display = val.length ? 'none' : '';
+      ccSpan.textContent = `${val.length.toLocaleString()} chars · ${lineCount} line${lineCount !== 1 ? 's' : ''}`;
+      let nums = '';
+      for (let i = 1; i <= lineCount; i++) nums += i + '\n';
+      lnInner.textContent = nums;
+    }
+
+    function onAnyInput(side) {
+      updateLineNumbersAndHints(side);
+      scheduleDiff();
+    }
+
+    // ── Scroll sync ───────────────────────────────────────────────
+    // Left panel: scroll left editor + left line numbers only
+    // Right panel: scroll right editor + right line numbers only
+    // Center thumb: scrolls BOTH panels together
+
+    function updateScrollThumb(activeWrap) {
+      if (!scrollTrack || !activeWrap) return;
+      const trackHeight  = scrollTrack.clientHeight;
+      const scrollHeight = activeWrap.scrollHeight;
+      const clientH      = activeWrap.clientHeight;
+      if (scrollHeight <= clientH) {
+        scrollThumb.style.display = 'none';
+        return;
+      }
+      scrollThumb.style.display = 'block';
+      const thumbHeight = Math.max(24, trackHeight * (clientH / scrollHeight));
+      const pct    = activeWrap.scrollTop / (scrollHeight - clientH);
+      const maxTop = trackHeight - thumbHeight;
+      scrollThumb.style.height = thumbHeight + 'px';
+      scrollThumb.style.top    = Math.round(pct * maxTop) + 'px';
+    }
+
+    function bindPanelScroll() {
+      const leftLn  = lnLeftInner.parentElement;
+      const rightLn = lnRightInner.parentElement;
+
+      // Left panel scrolls independently - only syncs left line numbers
+      edWrapLeft.addEventListener('scroll', () => {
+        leftLn.scrollTop = edWrapLeft.scrollTop;
+        updateScrollThumb(edWrapLeft);
+      });
+
+      // Right panel scrolls independently - only syncs right line numbers
+      edWrapRight.addEventListener('scroll', () => {
+        rightLn.scrollTop = edWrapRight.scrollTop;
+        updateScrollThumb(edWrapRight);
+      });
+    }
+
+    // ── Thumb drag (mouse + touch) — scrolls BOTH panels ────────
+    function initThumbDrag() {
+      let isDragging = false, startY = 0, startTop = 0;
+
+      function applyThumbPos(newTop) {
+        const trackH = scrollTrack.clientHeight;
+        const thumbH = scrollThumb.clientHeight;
+        newTop = Math.max(0, Math.min(trackH - thumbH, newTop));
+        scrollThumb.style.top = newTop + 'px';
+        const pct = newTop / (trackH - thumbH || 1);
+
+        // Scroll BOTH panels + their line numbers
+        const leftPos  = pct * (edWrapLeft.scrollHeight  - edWrapLeft.clientHeight);
+        const rightPos = pct * (edWrapRight.scrollHeight - edWrapRight.clientHeight);
+        edWrapLeft.scrollTop  = leftPos;
+        edWrapRight.scrollTop = rightPos;
+        lnLeftInner.parentElement.scrollTop  = leftPos;
+        lnRightInner.parentElement.scrollTop = rightPos;
+      }
+
+      function startDrag(y) {
+        isDragging = true;
+        startY   = y;
+        startTop = parseFloat(scrollThumb.style.top) || 0;
+        scrollThumb.classList.add('dragging');
+      }
+
+      function moveDrag(y) {
+        if (!isDragging) return;
+        applyThumbPos(startTop + (y - startY));
+      }
+
+      function endDrag() {
+        isDragging = false;
+        scrollThumb.classList.remove('dragging');
+      }
+
+      // Mouse events
+      scrollThumb.addEventListener('mousedown', (e) => { startDrag(e.clientY); e.preventDefault(); });
+      window.addEventListener('mousemove',  (e) => moveDrag(e.clientY));
+      window.addEventListener('mouseup',    endDrag);
+
+      // Touch events
+      scrollThumb.addEventListener('touchstart', (e) => { startDrag(e.touches[0].clientY); }, { passive: true });
+      window.addEventListener('touchmove',  (e) => { if (isDragging) { e.preventDefault(); moveDrag(e.touches[0].clientY); } }, { passive: false });
+      window.addEventListener('touchend',   endDrag);
+
+      // Click on track to jump
+      centerScrollArea.addEventListener('click', (e) => {
+        if (e.target === scrollThumb) return;
+        const rect   = scrollTrack.getBoundingClientRect();
+        const thumbH = scrollThumb.clientHeight;
+        applyThumbPos((e.clientY - rect.top) - thumbH / 2);
+      });
+    }
+
+    window.addEventListener('resize', () => {
+      updateScrollThumb(edWrapLeft);
+    });
+
+    // ── Mode switching ────────────────────────────────────────────
+    function setMode(mode) {
+      diffMode = mode;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        const isActive = btn.dataset.mode === mode;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+      scheduleDiff();
+    }
+
+    // ── Actions ───────────────────────────────────────────────────
+    function clearAll() {
+      taLeft.value  = '';
+      taRight.value = '';
+      updateLineNumbersAndHints('left');
+      updateLineNumbersAndHints('right');
+      scheduleDiff();
+    }
+
+    function exportDiff() {
+      const leftLines  = taLeft.value.split('\n');
+      const rightLines = taRight.value.split('\n');
+      const ops = diffArrays(leftLines, rightLines);
+      let out = '--- Original\n+++ Modified\n\n';
+      for (const op of ops) {
+        if (op.type === 'eq')       out += `  ${op.val}\n`;
+        else if (op.type === 'del') out += `- ${op.val}\n`;
+        else                        out += `+ ${op.val}\n`;
+      }
+
+      const btn = document.getElementById('exportBtn');
+      const origHTML = btn.innerHTML;
+
+      navigator.clipboard.writeText(out).then(() => {
+        btn.innerHTML = '✓ Copied!';
+        btn.classList.add('active');
+        setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 1500);
+      }).catch(() => {
+        // Fallback for browsers that block clipboard access
+        const ta = document.createElement('textarea');
+        ta.value = out;
+        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          btn.innerHTML = '✓ Copied!';
+          btn.classList.add('active');
+          setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 1500);
+        } catch {
+          alert('Copy failed. Please copy manually.');
+        }
+        document.body.removeChild(ta);
+      });
+    }
+
+    function toggleTheme() {
+      isDark = !isDark;
+      if (isDark) {
+        document.body.removeAttribute('data-theme');
+        document.getElementById('themeBtn').textContent = '🌙';
+      } else {
+        document.body.setAttribute('data-theme', 'light');
+        document.getElementById('themeBtn').textContent = '☀️';
+      }
+    }
+
+    // ── Event listeners ───────────────────────────────────────────
+    taLeft.addEventListener('input',  () => onAnyInput('left'));
+    taRight.addEventListener('input', () => onAnyInput('right'));
+
+    document.querySelectorAll('.tab-btn').forEach(btn =>
+      btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+
+    document.getElementById('clearBtn').addEventListener('click',  clearAll);
+    document.getElementById('exportBtn').addEventListener('click', exportDiff);
+    document.getElementById('themeBtn').addEventListener('click',  toggleTheme);
+
+    // ── Keyboard shortcuts ────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd + Shift + C → export diff
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        exportDiff();
+      }
+      // Ctrl/Cmd + Shift + X → clear
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'X') {
+        e.preventDefault();
+        clearAll();
+      }
+    });
+
+    // ── Init ──────────────────────────────────────────────────────
+    bindPanelScroll();
+    initThumbDrag();
+    updateLineNumbersAndHints('left');
+    updateLineNumbersAndHints('right');
+    setMode('line');
+    requestAnimationFrame(() => updateScrollThumb(edWrapLeft));
+
+  })();
+</script>
+</body>
+</html>
