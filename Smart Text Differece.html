@@ -389,7 +389,7 @@
 
   .line-numbers-inner {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 12.5px;
     line-height: 1.65;
     color: var(--line-num);
     text-align: right;
@@ -424,8 +424,7 @@
     font-size: 12.5px;
     line-height: 1.65;
     padding: 14px 16px;
-    white-space: pre-wrap;
-    word-break: break-word;
+    white-space: pre;
     tab-size: 2;
     -moz-tab-size: 2;
   }
@@ -449,6 +448,19 @@
     position: relative;
   }
 
+  /* In word/char mode, overlay renders actual text so textarea must be hidden */
+  .diff-grid.mode-word > textarea,
+  .diff-grid.mode-char > textarea {
+    color: transparent !important;
+    caret-color: var(--accent) !important;
+  }
+
+  /* In word/char mode, overlay text must be visible */
+  .diff-grid.mode-word > .diff-overlay,
+  .diff-grid.mode-char > .diff-overlay {
+    color: var(--text);
+  }
+
   /* inline highlight spans */
   .diff-overlay span.line {
     display: block;
@@ -469,8 +481,6 @@
 
   .diff-overlay mark {
     border-radius: 3px;
-    padding: 0 1px;
-    font-weight: 700;
   }
   .diff-overlay mark.add { background: var(--add-mark); color: var(--add-text); }
   .diff-overlay mark.del { background: var(--del-mark); color: var(--del-text); text-decoration: line-through; text-decoration-thickness: 1px; }
@@ -675,7 +685,6 @@
 </header>
 
 <main class="main-area" role="main">
-  <!-- LEFT PANEL (Original) -->
   <div class="panel panel-left" role="region" aria-label="Original text">
     <div class="panel-header">
       <span class="panel-label-badge">Original</span>
@@ -697,7 +706,6 @@
     </div>
   </div>
 
-  <!-- CENTER SCROLL HANDLE -->
   <div class="center-divider" id="centerDiv" aria-hidden="true">
     <div class="center-scroller-area" id="centerScrollArea">
       <div class="center-scroll-track" id="scrollTrack">
@@ -706,7 +714,6 @@
     </div>
   </div>
 
-  <!-- RIGHT PANEL (Modified) -->
   <div class="panel panel-right" role="region" aria-label="Modified text">
     <div class="panel-header">
       <span class="panel-label-badge">Modified</span>
@@ -751,9 +758,7 @@
 
     let diffMode      = 'line';
     let debounceTimer = null;
-    let diffScheduled = false;
     let isDark        = !window.matchMedia('(prefers-color-scheme: light)').matches;
-    let stats         = { add: 0, del: 0, chg: 0 };
 
     // Apply initial theme
     if (!isDark) {
@@ -763,14 +768,18 @@
 
     // ── HTML escape helper ────────────────────────────────────────
     const esc = (str) =>
-      String(str).replace(/[&<>"']/g, (m) => ({
+      (str == null ? '' : String(str)).replace(/[&<>"']/g, (m) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[m]));
 
     // ── LCS + diff engine ────────────────────────────────────────
+    const LCS_SIZE_LIMIT = 3000; // guard against O(m×n) freeze
+
     function lcsSimple(a, b) {
       const m = a.length, n = b.length;
       if (m === 0 || n === 0) return [];
+      // Skip LCS for very large inputs to avoid browser freeze
+      if (m * n > LCS_SIZE_LIMIT * LCS_SIZE_LIMIT) return [];
 
       // Use flat Array (not Uint16Array) to avoid 65535 cap on long files
       const w = n + 1;
@@ -862,11 +871,9 @@
           i += 2;
         } else if (op.type === 'del') {
           leftSpans.push(`<span class="line del">${esc(op.val)}</span>`);
-          rightSpans.push(`<span class="line">&nbsp;</span>`);
           del++;
           i++;
         } else {
-          leftSpans.push(`<span class="line">&nbsp;</span>`);
           rightSpans.push(`<span class="line add">${esc(op.val)}</span>`);
           add++;
           i++;
@@ -886,23 +893,17 @@
         const leftLine  = i < lLines.length ? lLines[i] : null;
         const rightLine = i < rLines.length ? rLines[i] : null;
         if (leftLine === null) {
-          leftRes.push(`<span class="line">&nbsp;</span>`);
           rightRes.push(`<span class="line add">${esc(rightLine)}</span>`);
           add++;
         } else if (rightLine === null) {
           leftRes.push(`<span class="line del">${esc(leftLine)}</span>`);
-          rightRes.push(`<span class="line">&nbsp;</span>`);
           del++;
         } else if (leftLine === rightLine) {
           leftRes.push(`<span class="line">${esc(leftLine)}</span>`);
           rightRes.push(`<span class="line">${esc(rightLine)}</span>`);
         } else {
-          const tokensL = diffMode === 'word'
-            ? (leftLine.match(/\S+|\s+/g)  || [''])
-            : leftLine.split('');
-          const tokensR = diffMode === 'word'
-            ? (rightLine.match(/\S+|\s+/g) || [''])
-            : rightLine.split('');
+          const tokensL = tokenize(leftLine,  diffMode);
+          const tokensR = tokenize(rightLine, diffMode);
           const ops = diffArrays(tokensL, tokensR);
           let lHtml = '', rHtml = '';
           for (const op of ops) {
@@ -943,7 +944,6 @@
     }
 
     function updateStats(add, del, chg) {
-      stats = { add, del, chg };
       document.getElementById('addCount').textContent = add;
       document.getElementById('delCount').textContent = del;
       document.getElementById('chgCount').textContent = chg;
@@ -953,10 +953,8 @@
     function scheduleDiff() {
       loadingBar.classList.add('active');
       clearTimeout(debounceTimer);
-      diffScheduled = true;
       debounceTimer = setTimeout(() => {
         computeDiff();
-        diffScheduled = false;
         loadingBar.classList.remove('active');
       }, 80);
     }
@@ -1007,13 +1005,13 @@
       const leftLn  = lnLeftInner.parentElement;
       const rightLn = lnRightInner.parentElement;
 
-      // Left panel scrolls independently - only syncs left line numbers
+      // Scroll left editor and left line numbers independently
       edWrapLeft.addEventListener('scroll', () => {
         leftLn.scrollTop = edWrapLeft.scrollTop;
         updateScrollThumb(edWrapLeft);
       });
 
-      // Right panel scrolls independently - only syncs right line numbers
+      // Scroll right editor and right line numbers independently
       edWrapRight.addEventListener('scroll', () => {
         rightLn.scrollTop = edWrapRight.scrollTop;
         updateScrollThumb(edWrapRight);
@@ -1034,10 +1032,9 @@
         // Scroll BOTH panels + their line numbers
         const leftPos  = pct * (edWrapLeft.scrollHeight  - edWrapLeft.clientHeight);
         const rightPos = pct * (edWrapRight.scrollHeight - edWrapRight.clientHeight);
+        
         edWrapLeft.scrollTop  = leftPos;
         edWrapRight.scrollTop = rightPos;
-        lnLeftInner.parentElement.scrollTop  = leftPos;
-        lnRightInner.parentElement.scrollTop = rightPos;
       }
 
       function startDrag(y) {
@@ -1088,6 +1085,11 @@
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
       });
+      // Toggle CSS class on diff-grid elements so textarea text hides in word/char mode
+      document.querySelectorAll('.diff-grid').forEach(grid => {
+        grid.classList.remove('mode-line', 'mode-word', 'mode-char');
+        grid.classList.add('mode-' + mode);
+      });
       scheduleDiff();
     }
 
@@ -1120,11 +1122,11 @@
         setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('active'); }, 1500);
       }).catch(() => {
         // Fallback for browsers that block clipboard access
-        const ta = document.createElement('textarea');
-        ta.value = out;
-        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-        document.body.appendChild(ta);
-        ta.select();
+        const tempArea = document.createElement('textarea');
+        tempArea.value = out;
+        tempArea.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+        document.body.appendChild(tempArea);
+        tempArea.select();
         try {
           document.execCommand('copy');
           btn.innerHTML = '✓ Copied!';
@@ -1133,7 +1135,7 @@
         } catch {
           alert('Copy failed. Please copy manually.');
         }
-        document.body.removeChild(ta);
+        document.body.removeChild(tempArea);
       });
     }
 
